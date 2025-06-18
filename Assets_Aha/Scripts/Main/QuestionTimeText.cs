@@ -1,37 +1,43 @@
 using UnityEngine;
 
-[RequireComponent(typeof(TMPro.TextMeshProUGUI))]
-public class QuestionTimeText : MonoBehaviour
+namespace Aha.Main.UI
 {
-
-    private TMPro.TextMeshProUGUI text;
-    private float elaspedTime = 0f;
-
-    [SerializeField]
-    private float _Duration = 0.8f;
-
-    void Awake()
+    /// <summary>
+    /// 出題中のテキストクラス
+    /// </summary>
+    [RequireComponent(typeof(TMPro.TextMeshProUGUI))]
+    public class QuestionTimeText : MonoBehaviour
     {
-        text = GetComponent<TMPro.TextMeshProUGUI>();
-    }
 
-    public void Update()
-    {
-        elaspedTime += Time.deltaTime;
-        int intTime = (int)(elaspedTime / _Duration);
-        int tentenCount = intTime % 4;
+        private TMPro.TextMeshProUGUI text;
+        private float elaspedTime = 0f;
 
-        text.text = "出題中" + new string('.', tentenCount);
-    }
+        [SerializeField]
+        private float _Duration = 0.8f;
 
-    public void Show()
-    {
-        elaspedTime = 0f;
-        gameObject.SetActive(true);
-    }
+        void Awake()
+        {
+            text = GetComponent<TMPro.TextMeshProUGUI>();
+        }
 
-    public void Hide()
-    {
-        gameObject.SetActive(false);
+        public void Update()
+        {
+            elaspedTime += Time.deltaTime;
+            int intTime = (int)(elaspedTime / _Duration);
+            int tentenCount = intTime % 4;
+
+            text.text = "出題中" + new string('.', tentenCount);
+        }
+
+        public void Show()
+        {
+            elaspedTime = 0f;
+            gameObject.SetActive(true);
+        }
+
+        public void Hide()
+        {
+            gameObject.SetActive(false);
+        }
     }
 }

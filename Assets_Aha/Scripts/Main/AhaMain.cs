@@ -1,206 +1,126 @@
+using Aha.Main.Timer;
+using Aha.Main.UI;
+using Cysharp.Threading.Tasks;
+using UniRx;
 using UnityEngine;
-using System.Collections;
-using UnityEngine.UI;
-using UnityEngine.Playables;
 
-public class AhaMain : MonoBehaviour
+namespace Aha.Main
 {
-    public AhaAnswer AhaAnswer;
-    public AhaTimer AhaTimer;
-    public MissTimer MissTimer;
-
-    public QuestionTimeText QuestionTimeText;
-
-    bool isClear = false;
-
-    public Image X;
-
-    //キャンバス
-    public GameObject Canvas;
-    public GameObject ResultCanvas;
-    public GameObject GameOverCanvas;
-    public GameObject CompleteResultCanvas;
-
-    //演出
-    public ReadyGoEffect ReadyGoEffect;
-    public GameObject CorrectPanel;
-    public FadeCanvas FadeCanvas;
-
-    // 問題プレハブ情報
-    public QuestionStorage QuestionStorage;
-
-    //ミス用
-    public GameObject MissCursor;
-    public Image MissMark;
-
-    void Start()
-    {
-        AudioManager.Instance.StopBGM();
-        AhaAnswer.enabled = false;
-        StartCoroutine(GameRoutine());
-    }
-
-    IEnumerator GameRoutine()
-    {
-        // 最終問かどうかで分岐
-        if (SceneController.SelectedStageNumber >= QuestionStorage.Objects.Count)
-        {
-            OpenCompleteResultCanvas();
-        }
-
-        yield return StartPhase();
-        AudioManager.Instance.PlayBGM("main");
-        yield return AhaWatchPhase();
-        yield return AhaAnswerPhase();
-
-        //リザルト（正解orゲームオーバー）
-        ResultPhase();
-    }
-
-    IEnumerator StartPhase()
-    {
-        ReadyGoEffect.gameObject.SetActive(true);
-        //再生終了まで待つ
-        yield return new WaitUntil(() => ReadyGoEffect.Director.time >= ReadyGoEffect.Director.duration);
-        ReadyGoEffect.gameObject.SetActive(false);        
-    }
-
-    IEnumerator AhaWatchPhase()
-    {
-        /*
-        string questionPrefabName = "Questions/Question" + SceneController.SelectedStageNumber;        
-        var question = Resources.Load(questionPrefabName);
-        var questionObj = Instantiate(question) as GameObject;
-        var AhaScript = questionObj.GetComponent<QuestionPrefab>();
-        */
-        // 問題プレハブを管理するやつ 経由でプレハブを取得
-        var prefab = QuestionStorage.Objects[SceneController.SelectedStageNumber].prefab;
-        var AhaScript = Instantiate(prefab);
-
-        // 「出題中」がいらない場合は以下の1行を消す
-        //QuestionTimeText.Show();
-
-        //yield return new WaitUntil(() => AhaScript.IsFinished);
-        yield return null;
-    }
-
-    IEnumerator AhaAnswerPhase()
-    {
-        AhaAnswer.enabled = true;
-
-        // 「出題中」がいらない場合は以下の1行を消す
-        //QuestionTimeText.Hide();
-        
-        //回答タイマー開始
-        AhaTimer.TimerStart();
-        
-        while (true)
-        {
-            if (AhaAnswer.IsAnswered)
-            {
-                if (AhaAnswer.IsCorrect)
-                {
-                    //正解処理
-                    Debug.Log("正解しました。");
-                    AhaTimer.PauseTimer();
-                    isClear = true;
-                    yield return CorrectEffect();
-                    yield break;
-                }
-                else
-                {
-                    //不正解処理
-                    Debug.Log("お手付きです。お手付きタイマー開始");
-                    AudioManager.Instance.PlaySE("incorrect");
-                    //現回答一時停止
-                    AhaAnswer.enabled = false;
-                    //AhaTimer.PauseTimer();
-                    X.enabled = true;
-                    //お手付きタイマー処理
-                    MissTimer.Init();
-                    MissTimer.TimerStart();
-                    MissCursor.SetActive(true);
-                    yield return ShowMissMark();
-                    yield return new WaitUntil(() => 
-                        MissTimer.IsFinished ||
-                        AhaTimer.IsFinished);
-                    MissCursor.SetActive(false);
-                    Debug.Log("お手付き終了、もう一周");
-                    AhaAnswer.enabled = true;
-
-                    //再回答処理
-                    X.enabled = false;
-                    AhaAnswer.IsAnswered = false;
-                    //AhaTimer.ResumeTimer();
-                }
-            }
-            if (AhaTimer.IsFinished)
-            {
-                Debug.Log("じかん切れ、ゲームオーバーです。");
-                AhaAnswer.enabled = false;
-                isClear = false;
-                yield break;
-            }
-            yield return null;
-        }
-    }
-
-    void ResultPhase()
-    {
-        if (isClear)
-        {
-            // ともかくクリアしたらクリア状況はセーブする
-            Singleton<ScoreManager>.Instance.SetCleared(SceneController.SelectedStageNumber, isClear);
-            Singleton<ScoreManager>.Instance.Save();
-
-            OpenResultCanvas();
-        }
-        else
-        {
-            OpenGameOverCanvas();
-        }
-    }
-
-    public void OpenResultCanvas()
-    {
-        Debug.Log("リザルトキャンバス開く");
-        FadeCanvas.ShowFadePanel(Canvas, ResultCanvas);
-        AudioManager.Instance.PlaySE("correct_voice");
-    }
-
-    public void OpenCompleteResultCanvas()
-    {
-        Debug.Log("完璧リザルトキャンバス開く");
-        FadeCanvas.ShowFadePanel(Canvas, CompleteResultCanvas);
-        AudioManager.Instance.PlaySE("complete_correct_voice");
-    }
-
-    public void OpenGameOverCanvas()
-    {
-        Debug.Log("ゲームオーバーキャンバス開く");
-        GameOverCanvas.SetActive(true);
-        AudioManager.Instance.PlaySE("incorrect_voice");
-    }
-
     /// <summary>
-    /// 正解演出
+    /// アハのメインゲームシステム
     /// </summary>
-    IEnumerator CorrectEffect()
+    public class AhaMain : MonoBehaviour
     {
-        CorrectPanel.SetActive(true);
-        AudioManager.Instance.PlaySE("correct");
-        yield return new WaitForSeconds(1.2f);
-        CorrectPanel.SetActive(false);
-    }
+        //システム
+        [SerializeField] private AhaAnswer ahaAnswer;
+        [SerializeField] private AhaUIManager ahaUIManager;
+        [SerializeField] private AhaTimerManager ahaTimerManager;
+        [SerializeField] private GameClearManager gameClearManager;
 
-    IEnumerator ShowMissMark()
-    {
-        Vector2 pos = MissMark.rectTransform.position;
-        pos.x = AhaAnswer.ClickedPosition.x;
-        pos.y = AhaAnswer.ClickedPosition.y;
-        MissMark.rectTransform.position = pos;
-        MissMark.enabled = true;
-        yield return new WaitForSeconds(0.5f);
-        MissMark.enabled = false;
+        //演出
+        [SerializeField] private ReadyGoEffect readyGoEffect;
+
+        //問題
+        [SerializeField] private QuestionCreator questionCreator;
+
+        /// <summary>
+        /// お手付きの管理クラス
+        /// </summary>
+        [SerializeField] private MissManager missManager;
+
+        void Start()
+        {
+            //例外的に最後はおめでとう表示を行う
+            if (gameClearManager.IsGameClear())
+            {
+                gameClearManager.OpenCompleteResultCanvas();
+                return;
+            }
+
+            Init();
+            Subscribes();
+            GameRoutine().Forget();
+        }
+
+        private void Init()
+        {
+            AudioManager.Instance.StopBGM();
+            ahaAnswer.enabled = false;
+        }
+
+        /// <summary>
+        /// ゲーム全体のルーティーン
+        /// </summary>
+        /// <returns></returns>
+        private async UniTask GameRoutine()
+        {            
+            await readyGoEffect.PlayReadyGo();
+            questionCreator.CreateQuestion();
+            var isClear = await AhaAnswerPhase();
+            if (isClear) Save();
+        }
+
+        /// <summary>
+        ///　購読処理
+        /// </summary>
+        private void Subscribes()
+        {
+            //アハに正解したら正解キャンバスを表示する
+            ahaAnswer.IsCorrectedObservable.Where(isCorrected => isCorrected)
+                .Subscribe(_ => ahaUIManager.CorrectResultRoutine().Forget())
+                .AddTo(this);
+
+            //アハに不正解時、お手付き処理を表示する
+            ahaAnswer.IsCorrectedObservable.Where(isCorrected => !isCorrected)
+                .Subscribe(_ => missManager.ShowInCorrectEffect())
+                .AddTo(this);
+
+            //時間切れの場合、ゲームオーバーを表示する
+            ahaTimerManager.MainTimer.TimerEndObservable
+                .Subscribe(_ => ahaUIManager.OpenGameOverCanvas())
+                .AddTo(this);
+            
+            //お手付きの間、解答を無効にする
+            ahaTimerManager.MissTimer.TimerStartObservable
+                .Subscribe(_ => ahaAnswer.enabled = false)
+                .AddTo(this);
+            ahaTimerManager.MissTimer.TimerEndObservable
+                .Subscribe(_ =>
+                {
+                    ahaAnswer.enabled = true;
+                    ahaAnswer.IsAnswered = false; //解答フラグリセット
+                })
+                .AddTo(this);
+        }
+
+        /// <summary>
+        /// 解答フェーズ
+        /// </summary>
+        /// <returns></returns>
+        private async UniTask<bool> AhaAnswerPhase()
+        {
+            ahaAnswer.enabled = true;
+            AudioManager.Instance.PlayBGM("main");
+            ahaTimerManager.MainTimer.StartTimer();
+
+            //正解（クリア）か、タイムアウト（ゲームオーバー）まで待つ
+            var correctedSubject = ahaAnswer.IsCorrectedObservable.Where(isCorrected => isCorrected).Select(_ => true);
+            var timeoutSubject = ahaTimerManager.MainTimer.TimerEndObservable.Select(_ => false);
+            var merged = Observable.Merge(correctedSubject, timeoutSubject);
+            bool isClear = await merged.First().ToUniTask();
+
+            ahaTimerManager.MainTimer.StopTimer();
+            ahaAnswer.enabled = false;
+            return isClear;
+        }
+
+        /// <summary>
+        /// セーブ
+        /// </summary>
+        private void Save()
+        {
+            Singleton<ScoreManager>.Instance.SetCleared(SceneController.SelectedStageNumber, true);
+            Singleton<ScoreManager>.Instance.Save();
+        }
     }
 }

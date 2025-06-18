@@ -1,24 +1,41 @@
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Playables;
-using System.Collections;
 
-public class ReadyGoEffect : MonoBehaviour
+namespace Aha.Main
 {
-
-    public PlayableDirector Director;
-
-    private void Start()
+    /// <summary>
+    /// レディーゴー演出を行うクラス
+    /// </summary>
+    public class ReadyGoEffect : MonoBehaviour
     {
-        Director.Play();
-        StartCoroutine("PlaySE");
-        
-    }
+        [SerializeField] private PlayableDirector director;
 
-    IEnumerator PlaySE()
-    {
-        //無理やりディレイをかける（タイムラインの音がオーディオマネージャーの設定と別になるので）
-        yield return new WaitForSeconds(0.5f);
-        AudioManager.Instance.PlaySE("clock_timer");
-    }
+        private void Start()
+        {
+            director.Play();
+            PlaySE().Forget();
+        }
 
+        /// <summary>
+        /// レディーゴー演出を再生する
+        /// </summary>
+        /// <returns></returns>
+        public async UniTask PlayReadyGo()
+        {
+            this.gameObject.SetActive(true);
+            director.Play();
+            PlaySE().Forget();
+
+            await UniTask.WaitUntil(() => director.time >= director.duration);
+            this.gameObject.SetActive(false);
+        }
+
+        private async UniTask PlaySE()
+        {
+            //無理やりディレイをかける（タイムラインの音がオーディオマネージャーの設定と別になるため）
+            await UniTask.Delay(500);
+            AudioManager.Instance.PlaySE("clock_timer");
+        }
+    }
 }
